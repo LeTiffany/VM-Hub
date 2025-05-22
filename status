@@ -1,0 +1,71 @@
+#! /usr/bin/python3
+
+import cgi
+import MySQLdb
+import boto3
+import passwords
+
+form = cgi.FieldStorage()
+
+if "server_id" in form:
+	server_id = form["server_id"].value
+else:
+    print("Status: 400 Bad Request")
+    print("Content-Type: text/html")
+    print()
+    
+    print("<html><body>400 Bad Request</body></html>")
+    exit()
+
+conn = MySQLdb.connect(
+    host = passwords.host,
+    user = passwords.user,
+    passwd = passwords.passwd,
+    db = "servers"
+)
+cur = conn.cursor()
+cur.execute("SELECT * from servers WHERE id = %s", (server_id,))
+data = cur.fetchone()
+cur.close()
+conn.close()
+
+ec2 = boto3.client(
+    "ec2",
+    region_name = passwords.region,
+    aws_access_key_id = passwords.key,
+    aws_secret_access_key = passwords.secret
+)
+
+response = ec2.describe_instances(InstanceIds = [data[3]])
+reservations = response.get('Reservations')
+if reservations:
+    instance = reservations[0].get('Instances')[0]
+    ip = instance.get('PublicIpAddress')
+else:
+    ip = None
+
+if data[4] == 0:
+    print("Status: 200 OK")
+    print("Content-Type: text/html")
+    print()
+
+    print("""<html>
+        <body>
+        <h1>Success!</h1>
+        <h2>Server Created</h2>
+        <p>Please wait momentarily as the new server is being initialized.</p>
+        </body>
+        </html>""")
+else:
+    print("Status: 200 OK")
+    print("Content-Type: text/html")
+    print()
+
+    print(f"""<html>
+        <body>
+        <h1>Server Ready!</h1>
+        <h2>Ready to Connect</h2>
+        <p>{data[1]}, your new server for <font color="blue">{data[2]}</font> is ready!</p>
+        <p>The server id is <font color="blue">{data[0]}</font> and the IP address is <font color="blue">{ip}</font></p>
+        </body>
+        </html>""")

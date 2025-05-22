@@ -1,0 +1,60 @@
+#! /usr/bin/python3
+
+import os
+import MySQLdb
+import passwords
+
+cookies = os.environ.get("HTTP_COOKIE")
+session_id = ""
+if cookies:
+    for pair in cookies.split("; "):
+        if pair.startswith("session_id="):
+            session_id = pair.split("=")[1]
+
+if session_id:
+    conn = MySQLdb.connect(
+        host = passwords.host,
+        user = passwords.user,
+        passwd = passwords.passwd,
+        db = "servers"
+    )
+    cur = conn.cursor()
+    cur.execute("SELECT user FROM sessions WHERE id = %s;", (session_id,))
+    user = cur.fetchone()
+    cur.close()
+    conn.close()
+    if user:
+        print("Status: 200 OK")
+        print("Content-Type: text/html")
+        print()
+
+        print(f"""
+              <html>
+              <body>
+              <h1>Server Dashboard</h1>
+              <h2>Welcome, {user[0]}!</h2>
+              <h2>Servers</h2>
+              <form action="/cgi-bin/api/servers/{user[0]}" method="GET">
+              <input type="submit" value="View">
+              </form>
+              <h2>Create Server</h2>
+              <form action="/cgi-bin/create_server" method="POST">
+              Description: <input type="text" name="description"><br>
+              <input type="hidden" name="user" value="{user[0]}">
+              <input type="submit">
+              </form>
+              <h2>Delete Server</h2>
+              <form action="/cgi-bin/delete_server" method="POST">
+              Server ID: <input type="text" name="server_id"><br>
+              <input type="submit">
+              </form>
+              </body>
+              </html>""")
+    else:
+        print("Status: 303 Redirect")
+        print("Location: /login_page")
+        print()
+else:
+    print("Status: 303 Redirect")
+    print("Location: /login_page")
+    print()

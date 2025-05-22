@@ -1,0 +1,35 @@
+#! /usr/bin/python3
+
+import sys
+import MySQLdb
+import boto3
+import time
+import passwords
+
+server_id = sys.argv[1]
+instance_id = sys.argv[2]
+
+ec2 = boto3.client(
+    "ec2",
+    region_name = passwords.region,
+    aws_access_key_id = passwords.key,
+    aws_secret_access_key = passwords.secret
+)
+
+state = None
+while state != "running":
+    response = ec2.describe_instances(InstanceIds = [instance_id])
+    state = response["Reservations"][0]["Instances"][0]["State"]["Name"]
+    time.sleep(5)
+
+conn = MySQLdb.connect(
+    host = passwords.host,
+    user = passwords.user,
+    passwd = passwords.passwd,
+    db = "servers"
+)
+cur = conn.cursor()
+cur.execute("UPDATE servers SET ready = 1 WHERE id = %s;", (server_id,))
+conn.commit()
+cur.close()
+conn.close()

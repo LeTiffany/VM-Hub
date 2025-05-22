@@ -1,0 +1,10 @@
+<html>
+<body>
+<h1>User Login</h1>
+<h2>Enter Username</h2>
+<form action="/cgi-bin/login" method="POST">
+Username: <input type="text" name="user"><br>
+<input type="submit" value="Log In">
+</form>
+</body>
+</html>

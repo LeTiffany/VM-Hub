@@ -1,0 +1,62 @@
+#! /usr/bin/python3
+
+import os
+import cgi
+import MySQLdb
+import boto3
+import passwords
+
+form = cgi.FieldStorage()
+
+if "user" in form:
+	user = form["user"].value
+else:
+    print("Status: 400 Bad Request")
+    print("Content-Type: text/html")
+    print()
+    
+    print("<html><body>400 Bad Request</body></html>")
+    exit()
+
+if "description" in form:
+	description = form["description"].value
+else:
+	description = None
+
+ec2 = boto3.resource(
+	"ec2",
+	region_name = passwords.region,
+	aws_access_key_id = passwords.key,
+	aws_secret_access_key = passwords.secret
+)
+
+instance = ec2.create_instances(
+    ImageId = passwords.ami,
+    MinCount = 1,
+    MaxCount = 1,
+    InstanceType = passwords.type,
+    KeyName = passwords.ssh,
+    SecurityGroupIds = [passwords.security],
+    UserData = open("/init_script").read()
+)[0]
+
+instance_id = instance.id
+
+conn = MySQLdb.connect(
+	host = passwords.host,
+	user = passwords.user,
+	passwd = passwords.passwd,
+	db = "servers"
+)
+cur = conn.cursor()
+cur.execute("INSERT INTO servers (owner, description, instanceID) VALUES (%s, %s, %s);", (user, description, instance_id))
+conn.commit()
+server_id = cur.lastrowid
+cur.close()
+conn.close()
+
+os.system(f"/usr/lib/cgi-bin/monitor_new_node {server_id} {instance_id} 1>/dev/null 2>/dev/null &")
+
+print("Status: 303 Redirect")
+print(f"Location: /cgi-bin/status?server_id={server_id}")
+print()

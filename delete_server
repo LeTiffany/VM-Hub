@@ -1,0 +1,44 @@
+#! /usr/bin/python3
+
+import cgi
+import MySQLdb
+import boto3
+import passwords
+
+form = cgi.FieldStorage()
+
+if "server_id" in form:
+    server_id = form["server_id"].value
+else:
+    print("Status: 400 Bad Request")
+    print("Content-Type: text/html")
+    print()
+    
+    print("<html><body>400 Bad Request</body></html>")
+    exit()
+
+conn = MySQLdb.connect(
+    host = passwords.host,
+    user = passwords.user,
+    passwd = passwords.passwd,
+    db = "servers"
+)
+cur = conn.cursor()
+cur.execute("SELECT instanceID from servers WHERE id = %s;", (server_id,))
+instance_id = cur.fetchone()[0]
+cur.execute("DELETE FROM servers WHERE id = %s;", (server_id,))
+conn.commit()
+cur.close()
+conn.close()
+
+ec2 = boto3.client(
+    "ec2",
+    region_name = passwords.region,
+    aws_access_key_id = passwords.key,
+    aws_secret_access_key = passwords.secret
+)
+ec2.terminate_instances(InstanceIds = [instance_id])
+
+print("Status: 303 Redirect")
+print("Location: /cgi-bin/main")
+print()

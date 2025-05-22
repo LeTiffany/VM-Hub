@@ -1,0 +1,92 @@
+#! /usr/bin/python3
+
+import os
+import json
+import MySQLdb
+import boto3
+import passwords
+
+ec2 = boto3.client(
+    "ec2",
+    region_name = passwords.region,
+    aws_access_key_id = passwords.key,
+    aws_secret_access_key = passwords.secret
+)
+
+def get_server(end):
+    conn = MySQLdb.connect(
+        host = passwords.host,
+        user = passwords.user,
+        passwd = passwords.passwd,
+        db = "servers"
+    )
+    cur = conn.cursor()
+    if end:
+        if end.isnumeric():
+            cur.execute("SELECT * FROM servers WHERE id = %s;", (int(end),))
+        else:
+            cur.execute("SELECT * FROM servers WHERE owner = %s;", (end,))
+    else:
+        cur.execute("SELECT * FROM servers;")
+    data = cur.fetchall()
+    servers = []
+    if data:
+        for row in data:
+            server = {
+                'id': row[0],
+                'owner': row[1],
+                'description': row[2],
+                'public_ip': ""
+            }
+            if row[4] == 1:
+                ip = get_ip(row[3])
+                server['public_ip'] = ip
+            servers.append(server)
+    cur.close()
+    conn.close()
+    return servers
+
+def get_ip(instance_id):
+    response = ec2.describe_instances(InstanceIds = [instance_id])
+    reservations = response.get('Reservations')
+    if reservations:
+        instance = reservations[0].get('Instances')[0]
+        return instance.get('PublicIpAddress')
+    else:
+        return None
+
+def ok():
+    print("Status: 200 OK")
+    print("Content-Type: application/json")
+    print()
+
+def not_found(path):
+    print("Status: 404 Not Found")
+    print("Content-Type: text/html")
+    print()
+    print(f"""<html>
+          <body>
+          <p><font size=+3><b>404 Not Found</b></font></p>
+          <p>PATH_INFO: {path}</p>
+          </body>
+          </html>""")
+    
+def main():
+    path = os.environ.get("PATH_INFO")
+    path_list = path.strip("/").split("/")
+    if len(path_list) == 1 and path_list[0] == "servers":
+        servers = get_server(None)
+        ok()
+        print(json.dumps(servers))
+    elif len(path_list) == 2 and path_list[0] == "servers":
+        servers = get_server(path_list[1])
+        if path_list[1].isnumeric():
+            ok()
+            print(json.dumps(servers[0]))
+        else:
+            ok()
+            print(json.dumps(servers))
+    else:
+        not_found(path)
+        
+main()
